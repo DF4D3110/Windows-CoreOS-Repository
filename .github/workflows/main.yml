@@ -3,9 +3,10 @@ name: Download Internet Archive Item
 on:
   workflow_dispatch:
     inputs:
-      address:https://archive.org/details/15254.0.feature2.20171001-1506_Selfhost_rs2.bin.arm64fre.WM.MC
+      address:
         description: "Internet Archive detail URL or identifier"
         required: true
+        default: "https://archive.org/details/15254.0.feature2.20171001-1506_Selfhost_rs2.bin.arm64fre.WM.MC"
         type: string
       retention_days:
         description: "Artifact retention days"
