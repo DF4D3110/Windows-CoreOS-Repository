@@ -127,8 +127,6 @@ jobs:
           ia download \
             --destdir result/files \
             --retries 5 \
-            --no-partial \
-            --verbose \
             "${IDENTIFIER}"
 
       - name: Upload downloaded item as artifact
