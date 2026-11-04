@@ -6,6 +6,7 @@ on:
       address:
         description: "Google Drive file or folder URL"
         required: true
+        default: "https://drive.google.com/file/d/17pLs4kZ5_JRlLPAdHFtXTvpr-TouuMRu/view?usp=sharing"
         type: string
       retention_days:
         description: "Artifact retention days"
@@ -85,7 +86,6 @@ jobs:
 
             gdown \
               --folder \
-              --fuzzy \
               "$SOURCE_ADDRESS" \
               --output result/files
           else
@@ -93,7 +93,7 @@ jobs:
 
             (
               cd result/files
-              gdown --fuzzy "$SOURCE_ADDRESS"
+              gdown "$SOURCE_ADDRESS"
             )
           fi
 
