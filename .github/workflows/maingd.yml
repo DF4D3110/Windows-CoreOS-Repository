@@ -1,0 +1,146 @@
+name: Download Google Drive Item
+
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: "Google Drive file or folder URL"
+        required: true
+        type: string
+      retention_days:
+        description: "Artifact retention days"
+        required: false
+        default: "3"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install gdown
+        run: |
+          python -m pip install \
+            --disable-pip-version-check \
+            --no-input \
+            gdown
+
+      - name: Validate address
+        shell: bash
+        env:
+          SOURCE_ADDRESS: ${{ inputs.address }}
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlparse
+
+          raw = os.environ["SOURCE_ADDRESS"].strip()
+
+          if not raw:
+              raise SystemExit("Google Drive address cannot be empty.")
+
+          parsed = urlparse(raw)
+
+          allowed_hosts = {
+              "drive.google.com",
+              "docs.google.com",
+              "drive.usercontent.google.com",
+          }
+
+          if parsed.scheme not in {"http", "https"}:
+              raise SystemExit("The address must be an HTTP or HTTPS URL.")
+
+          if (parsed.hostname or "").lower() not in allowed_hosts:
+              raise SystemExit("Only Google Drive URLs are supported.")
+
+          if not re.search(r"(drive|docs)\.google\.com", raw, re.I):
+              raise SystemExit("Invalid Google Drive URL.")
+
+          print("Google Drive URL accepted.")
+          PY
+
+      - name: Download Google Drive file or folder
+        shell: bash
+        env:
+          SOURCE_ADDRESS: ${{ inputs.address }}
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p result/files
+
+          if [[ "$SOURCE_ADDRESS" == *"/folders/"* ]]; then
+            echo "Detected a Google Drive folder."
+
+            gdown \
+              --folder \
+              --fuzzy \
+              "$SOURCE_ADDRESS" \
+              --output result/files
+          else
+            echo "Detected a Google Drive file."
+
+            (
+              cd result/files
+              gdown --fuzzy "$SOURCE_ADDRESS"
+            )
+          fi
+
+      - name: Generate manifest
+        shell: bash
+        env:
+          SOURCE_ADDRESS: ${{ inputs.address }}
+        run: |
+          set -Eeuo pipefail
+
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path("result/files")
+
+          files = []
+          for path in sorted(root.rglob("*")):
+              if path.is_file():
+                  files.append({
+                      "path": str(path.relative_to(root)),
+                      "size": path.stat().st_size,
+                  })
+
+          manifest = {
+              "source_url": os.environ["SOURCE_ADDRESS"],
+              "downloaded_at": datetime.now(timezone.utc).isoformat(),
+              "file_count": len(files),
+              "files": files,
+          }
+
+          Path("result/manifest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          PY
+
+          find result/files -type f -printf '%P\n' | sort \
+            > result/file-list.txt
+
+      - name: Upload downloaded files
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-drive-${{ github.run_id }}
+          path: result
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention_days }}
